@@ -2,7 +2,7 @@ mod nerdle;
 
 
 fn main() {
-    // nerdle::test();
+    nerdle::main();
 }
 
 
