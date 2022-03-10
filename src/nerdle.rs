@@ -1,5 +1,7 @@
 use std::cmp;
 use rand::Rng;
+use rand::seq::SliceRandom; // 0.7.2
+
 
 // Terms
 // nod: num of digits
@@ -22,6 +24,13 @@ impl Bounds {
     fn from_number(n: i32) -> Bounds {
     //    return Bounds::from_nod(n.log10() as i32);
        return Bounds::from_nod(n as i32);
+    }
+
+    fn to_borrowed(&self) -> Bounds {
+        Bounds {
+            min: self.min,
+            max: self.max
+        }
     }
 
     fn print(&self) {
@@ -55,15 +64,6 @@ impl Bounds {
     fn is_valid(&self) -> bool {
         self.min < self.max
     }
-
-
-    fn restrict_by_rest_and_result(&self, rest: Bounds, result: Bounds) -> Bounds {
-        Bounds {
-            min: 0,
-            max: 0,
-        }
-    }
-
 }
 
 #[derive(Clone)]
@@ -91,25 +91,30 @@ impl Expression {
 
         let mut queue = vec![];
 
-        for n in 1..len-2 {
+        for n in 1..len-1 {
             let ex = Expression {
                 nods: vec![n]
             };
             queue.push(ex);
         }
 
+        // Len 6
+        // First Gen [ [1], [2], [3], [4] ]
+        // Second Gen [ [1,1], [1,2], [1,3]  ]
 
         loop {
             let mut next_gen_queue = vec![];
             for ex in queue.to_owned() {
                 let current_len = ex.char_length();
                 let left = len - current_len;
-                for nod in 1..left-2 {
+                for nod in 1..left {
                     let new_exp = ex.append(nod);
-                    if new_exp.char_length() == len {
+                    let new_exp_len = new_exp.char_length();
+
+                    if  new_exp_len == len {
                         exps.push(new_exp.clone());
                     }
-                    if new_exp.char_length() < len {
+                    if new_exp_len < len {
                         next_gen_queue.push(new_exp);
                     }
                 }
@@ -119,15 +124,16 @@ impl Expression {
             }
             queue = next_gen_queue
         }
-
         exps.to_owned()
     }
 
-    // TODO
     // Generate random structure of size len
-    fn from_length(len: i32) -> Expression {
-        Expression {
-            nods: vec![],
+    fn from_length(len: i32) -> Option<Expression> {
+        let all_exp = Expression::gen_all_of_length(len);
+        let t = all_exp.choose(&mut rand::thread_rng());
+        match t {
+            Some(i) => Some(i.to_owned()),
+            None => None
         }
     }
 
@@ -140,9 +146,15 @@ impl Expression {
     }
 
     fn print(&self) {
+        let mut output = String::new();
         for nod in self.nods.to_owned() {
-            print!("{}", nod);
+            for _ in 0..nod {
+                output.push_str("x");
+            }
+            output.push_str("*");
         }
+        output.pop();
+        println!("{}", output);
     }
 
     fn char_length(&self) -> i32 {
@@ -150,78 +162,95 @@ impl Expression {
         for nod in self.nods.to_owned() {
             sum += nod
         }
-        sum + (self.nods.len() as i32)
+        sum + (self.nods.len() as i32) - 1
     }
 
     fn output_bounds(&self) -> Bounds {
-       if self.nods.len() < 2 {
+        if self.nods.len() == 0 {
             print!("Malformed Equality");
-       }
-       let nod1 = self.nods[0];
-       let nod2 = self.nods[1];
-
-       let bounds_add = add_value_bounds(nod1, nod2);
-       let bounds_sub = sub_value_bounds(nod1, nod2);
-       let bounds_mul = mul_value_bounds(nod1, nod2);
-
-
-       Bounds::union_many(&vec![&bounds_add, &bounds_sub, &bounds_mul])
-    }
-
-
-    //TODO
-    // We need to restrict the output bounds of self to something that when oped with the rest
-    // yeilds answer bounds
-    // self op rest \inside_of answer_bound
-    fn restrict_output_bounds(&self, rest_bounds: Bounds, answer_bounds: Bounds) -> Bounds {
-        Bounds {
-            min: 0,
-            max: 0
         }
-    }
 
-    // TODO
-    // Remove the first {amount} of elements from self
-    fn slice(&self, amount: i32) -> Expression {
-        Expression {
-            nods: vec![]
+        if self.nods.len() == 1 {
+            return Bounds::from_nod(self.nods[0]);
         }
-    }
 
-    //TODO
-    fn do_op(&self, output_bounds: Bounds) -> Equation {
-        Equation {
-            numbers: vec![],
-            ops: vec![]
-        }
-    }
-
-    fn gen_rand(&self, answer_bounds: Bounds) -> Equation {
-        // Do the first op
         let nod1 = self.nods[0];
         let nod2 = self.nods[1];
 
-        let eq1 = Expression {
-            nods: vec![nod1, nod2],
+        let bounds_add = add_value_bounds(nod1, nod2);
+        let bounds_sub = sub_value_bounds(nod1, nod2);
+        let bounds_mul = mul_value_bounds(nod1, nod2);
+
+
+        Bounds::union_many(&vec![&bounds_add, &bounds_sub, &bounds_mul])
+    }
+
+    // Remove the first {amount} of elements from self
+    fn slice(&self, amount: usize) -> Expression {
+        Expression {
+            nods: self.nods[amount..].to_vec()
+        }
+    }
+
+    fn gen_rand(&self, answer_bounds: Bounds) -> Option<Equation> {
+        // Generate a number in the chosen_value_bounds
+        let mut rng = rand::thread_rng();
+
+        let mut filled_eq = Equation {
+            numbers: vec![],
+            ops: vec![],
         };
 
-        let rest: Expression = self.slice(2);
+        let mut cum_answer_bounds = answer_bounds.to_borrowed();
 
-        let restricted_output_bounds = eq1.restrict_output_bounds(rest.output_bounds(), answer_bounds);
+        for i in 0..self.nods.len()-1 {
+            let nod = self.nods[i];
+            let rest = self.slice((i + 1) as usize);
 
-        let filled_eq = eq1.do_op(restricted_output_bounds);
+            let rest_bounds = rest.output_bounds();
 
-        // Loop over the rest, adding to the filled_eq
-        for nod in rest.nods {
-            filled_eq.do_op(nod, answer_bounds);
+            // Generate a number and op that when applied to rest will yeld a number in the answer range
+
+            let output_bounds = Bounds::from_nod(nod);
+
+            // Calculate bounds for all possible ops
+            let restricted_bounds_add = Bounds {
+                min: cum_answer_bounds.min - rest_bounds.max,
+                max: cum_answer_bounds.max - rest_bounds.min,
+            }
+            .intersect(&output_bounds);
+
+            // Check which bounds are possible and pick one of them
+            if !restricted_bounds_add.is_valid() {
+                return None;
+            }
+
+            let chosen_value_bounds = restricted_bounds_add;
+
+
+            let num = rng.gen_range(chosen_value_bounds.min..chosen_value_bounds.max);
+
+            // Undo the operation to the answer bounds
+            cum_answer_bounds = Bounds {
+                min: cum_answer_bounds.min - num,
+                max: cum_answer_bounds.max - num,
+            };
+
+            filled_eq.numbers.push(num);
+            filled_eq.ops.push(Op::Add);
         }
+
+        let nod = self.nods[self.nods.len()-1];
+        let end_bounds = cum_answer_bounds.intersect(&Bounds::from_nod(nod));
+        let num = rng.gen_range(end_bounds.min..end_bounds.max);
+        filled_eq.numbers.push(num);
 
         //Procedure
         //Take first two nods, Find what the bounds of the operations that restrict this to the bounds of the answer
         //  Will have to take the rest of the equality in account
         // With that result, get the next op and repeat the procdure.
 
-        filled_eq
+        Some(filled_eq)
     }
 
 }
@@ -237,17 +266,35 @@ impl Equation {
 
     }
 
-    // TODO
-    fn calc_value(&self) -> i32 {
-        0
+    fn print(&self) {
+        let mut eqStr = String::new();
+        for i in 0..self.numbers.len() {
+            let num = self.numbers[i];
+            eqStr.push_str(&num.to_string());
+            eqStr.push_str("+");
+        }
+        eqStr.pop();
+        eqStr.push_str("=");
+        eqStr.push_str(&self.calc_value().to_string());
+        println!("{}", eqStr);
     }
 
-    fn make_random(len: u8) -> Equation {
+    fn calc_value(&self) -> i32 {
+        let mut val = 0;
+        for i in 0..self.numbers.len() {
+            val += self.numbers[i]
+        }
+        val
+    }
+
+    fn make_random(len: u8) -> Option<Equation> {
         let mut rng = rand::thread_rng();
 
         let answer_max_nod: u8 = 3;
 
         let answer_nod = rng.gen_range(1..answer_max_nod+1);
+
+        println!("{}", answer_nod);
 
         let answer_bounds = Bounds {
             min: i32::pow(10, (answer_nod - 1) as u32),
@@ -258,14 +305,15 @@ impl Equation {
 
         let expression = Expression::from_length(nod_left as i32);
 
-        let equation = expression.gen_rand(answer_bounds);
-
-        equation
+        match expression {
+            Some(exp) => {
+                exp.print();
+                exp.gen_rand(answer_bounds)
+            }
+            None => None
+        }
     }
 }
-
-
-
 
 fn add_value_bounds(nod1: i32, nod2: i32) -> Bounds {
     let nod1_bounds = Bounds::from_nod(nod1);
@@ -314,23 +362,23 @@ mod tests {
 
     #[test]
     fn equality_bound() {
-        let eq1 = Expression {
-            nods: vec![1,1],
-        };
-        let b1 = eq1.max_bounds();
-        assert_eq!(b1, Bounds {
-            min: -9,
-            max: 81
-        });
+        // let eq1 = Expression {
+        //     nods: vec![1,1],
+        // };
+        // let b1 = eq1.max_bounds();
+        // assert_eq!(b1, Bounds {
+        //     min: -9,
+        //     max: 81
+        // });
 
-        let eq2 = Expression {
-            nods: vec![3, 2],
-        };
-        let b2 = eq2.max_bounds();
-        assert_eq!(b2, Bounds {
-            min: 100 - 99,
-            max: 999 * 99,
-        });
+        // let eq2 = Expression {
+        //     nods: vec![3, 2],
+        // };
+        // let b2 = eq2.max_bounds();
+        // assert_eq!(b2, Bounds {
+        //     min: 100 - 99,
+        //     max: 999 * 99,
+        // });
     }
 
 
@@ -402,20 +450,16 @@ mod tests {
             max: 99
         });
     }
-
-
-
 }
 
 
 pub fn main() {
-    //let eq = Equation::make_random(8);
-
-    let expresions = Expression::gen_all_of_length(6);
-    for exp in expresions {
-        exp.print();
+    let eq = Equation::make_random(8);
+    match eq {
+        Some(eq) => {
+            eq.print();
+        },
+        None => print!("No equation found")
     }
-
-
 }
 
