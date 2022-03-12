@@ -61,8 +61,19 @@ impl Bounds {
         }
     }
 
+    fn flip_non_valid(&self) -> Bounds {
+        Bounds {
+            min: cmp::min(self.min, self.max),
+            max: cmp::max(self.min, self.max),
+        }
+    }
+
     fn is_valid(&self) -> bool {
-        self.min < self.max
+        self.min <= self.max
+    }
+
+    fn random_value(&self) -> i32 {
+        rand::thread_rng().gen_range(self.min..self.max + 1)
     }
 }
 
@@ -71,6 +82,7 @@ struct Expression {
     nods: Vec<i32>,
 }
 
+#[derive(Clone, Copy)]
 enum Op {
     Add,
     Subtract,
@@ -179,16 +191,16 @@ impl Expression {
 
         let bounds_add = add_value_bounds(nod1, nod2);
         let bounds_sub = sub_value_bounds(nod1, nod2);
-        let bounds_mul = mul_value_bounds(nod1, nod2);
+        // let bounds_mul = mul_value_bounds(nod1, nod2);
 
 
-        Bounds::union_many(&vec![&bounds_add, &bounds_sub, &bounds_mul])
+        Bounds::union_many(&vec![&bounds_add, &bounds_sub])
     }
 
     // Remove the first {amount} of elements from self
     fn slice(&self, amount: usize) -> Expression {
         Expression {
-            nods: self.nods[amount..].to_vec()
+            nods: self.nods[0..amount].to_vec()
         }
     }
 
@@ -204,8 +216,11 @@ impl Expression {
         let mut cum_answer_bounds = answer_bounds.to_borrowed();
 
         for i in 0..self.nods.len()-1 {
-            let nod = self.nods[i];
-            let rest = self.slice((i + 1) as usize);
+
+            // Get the nod from the end of the array
+            let nod = self.nods[self.nods.len()-(i+1)];
+
+            let rest = self.slice((self.nods.len() - (i+1)) as usize);
 
             let rest_bounds = rest.output_bounds();
 
@@ -213,42 +228,87 @@ impl Expression {
 
             let output_bounds = Bounds::from_nod(nod);
 
-            // Calculate bounds for all possible ops
-            let restricted_bounds_add = Bounds {
-                min: cum_answer_bounds.min - rest_bounds.max,
-                max: cum_answer_bounds.max - rest_bounds.min,
-            }
-            .intersect(&output_bounds);
+            let restricted_sub_bounds_case_1 = Bounds {
+                min: rest_bounds.min - cum_answer_bounds.min,
+                max: rest_bounds.min - cum_answer_bounds.max,
+            }.flip_non_valid();
 
-            // Check which bounds are possible and pick one of them
-            if !restricted_bounds_add.is_valid() {
+            let restricted_sub_bounds_case_2 = Bounds {
+                min: rest_bounds.max - cum_answer_bounds.min,
+                max: rest_bounds.max - cum_answer_bounds.max,
+            }.flip_non_valid();
+
+            let restricted_add_bounds_case_1 = Bounds {
+                min: cum_answer_bounds.min - rest_bounds.min,
+                max: cum_answer_bounds.max - rest_bounds.min,
+            }.flip_non_valid();
+
+            let restricted_add_bounds_case_2 = Bounds {
+                min: cum_answer_bounds.min - rest_bounds.max,
+                max: cum_answer_bounds.max - rest_bounds.max,
+            }.flip_non_valid();
+
+
+            let restricted_add_bounds_1 = restricted_add_bounds_case_1;
+            let restricted_add_bounds_2 = restricted_add_bounds_case_2;
+
+            let restricted_add_bounds = Bounds::union_many(&vec![&restricted_add_bounds_1, &restricted_add_bounds_2]).intersect(&output_bounds);
+
+            let restricted_sub_bounds_1 = restricted_sub_bounds_case_1;
+            let restricted_sub_bounds_2 = restricted_sub_bounds_case_2;
+
+            let restricted_sub_bounds = Bounds::union_many(&vec![&restricted_sub_bounds_1, &restricted_sub_bounds_2]).intersect(&output_bounds);
+
+            let mut possible_op_bounds = vec![];
+
+            if restricted_add_bounds.is_valid() {
+               possible_op_bounds.push((restricted_add_bounds, Op::Add));
+            }
+
+            if restricted_sub_bounds.is_valid() {
+                possible_op_bounds.push((restricted_sub_bounds, Op::Subtract));
+            }
+
+            if possible_op_bounds.len() == 0 {
                 return None;
             }
 
-            let chosen_value_bounds = restricted_bounds_add;
+            // Choose random bounds from possible
+            let (chosen_bounds, op) = possible_op_bounds.choose(&mut rng).unwrap();
 
+            let num = chosen_bounds.random_value();
 
-            let num = rng.gen_range(chosen_value_bounds.min..chosen_value_bounds.max);
 
             // Undo the operation to the answer bounds
-            cum_answer_bounds = Bounds {
-                min: cum_answer_bounds.min - num,
-                max: cum_answer_bounds.max - num,
+            cum_answer_bounds = match op {
+                Op::Add => Bounds {
+                    min: cum_answer_bounds.min - num,
+                    max: cum_answer_bounds.max - num,
+                },
+                Op::Subtract => Bounds {
+                    min: cum_answer_bounds.min + num,
+                    max: cum_answer_bounds.max + num,
+                },
+                _ => panic!("Invalid op")
             };
 
             filled_eq.numbers.push(num);
-            filled_eq.ops.push(Op::Add);
+
+            filled_eq.ops.push(*op);
         }
 
-        let nod = self.nods[self.nods.len()-1];
+        let nod = self.nods[0];
         let end_bounds = cum_answer_bounds.intersect(&Bounds::from_nod(nod));
-        let num = rng.gen_range(end_bounds.min..end_bounds.max);
+
+        if !end_bounds.is_valid() {
+            return None;
+        }
+
+        let num = end_bounds.random_value();
         filled_eq.numbers.push(num);
 
-        //Procedure
-        //Take first two nods, Find what the bounds of the operations that restrict this to the bounds of the answer
-        //  Will have to take the rest of the equality in account
-        // With that result, get the next op and repeat the procdure.
+        // We filled the array backwards so it is flipped
+        filled_eq.numbers.reverse();
 
         Some(filled_eq)
     }
@@ -270,8 +330,14 @@ impl Equation {
         let mut eqStr = String::new();
         for i in 0..self.numbers.len() {
             let num = self.numbers[i];
+            let op = self.ops.get(i);
             eqStr.push_str(&num.to_string());
-            eqStr.push_str("+");
+            match op {
+                Some(Op::Add) => eqStr.push_str("+"),
+                Some(Op::Subtract) => eqStr.push_str("-"),
+                None => eqStr.push_str("?"),
+                _ => (),
+            };
         }
         eqStr.pop();
         eqStr.push_str("=");
@@ -280,9 +346,16 @@ impl Equation {
     }
 
     fn calc_value(&self) -> i32 {
-        let mut val = 0;
-        for i in 0..self.numbers.len() {
-            val += self.numbers[i]
+        let mut val = self.numbers[0];
+        for i in 1..self.numbers.len() {
+            let num = self.numbers[i];
+            let op = self.ops.get(i-1);
+            match op {
+                Some(Op::Add) => val += num,
+                Some(Op::Subtract) => val -= num,
+                None => (),
+                _ => (),
+            };
         }
         val
     }
@@ -293,17 +366,19 @@ impl Equation {
         let answer_max_nod: u8 = 3;
 
         let answer_nod = rng.gen_range(1..answer_max_nod+1);
+        // let answer_nod = 1;
 
         println!("{}", answer_nod);
 
-        let answer_bounds = Bounds {
-            min: i32::pow(10, (answer_nod - 1) as u32),
-            max: i32::pow(10, answer_nod as u32)  - 1,
-        };
+        let answer_bounds = Bounds::from_nod(answer_nod as i32);
 
-        let nod_left = len - answer_nod;
+        let nod_left = len - (answer_nod as u8);
 
         let expression = Expression::from_length(nod_left as i32);
+
+        // let expression = Some(Expression {
+        //     nods: vec![1,1,1]
+        // });
 
         match expression {
             Some(exp) => {
