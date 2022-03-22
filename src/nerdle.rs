@@ -21,11 +21,6 @@ impl Bounds {
         }
     }
 
-    fn from_number(n: i32) -> Bounds {
-    //    return Bounds::from_nod(n.log10() as i32);
-       return Bounds::from_nod(n as i32);
-    }
-
     fn to_borrowed(&self) -> Bounds {
         Bounds {
             min: self.min,
@@ -65,6 +60,13 @@ impl Bounds {
         Bounds {
             min: cmp::min(self.min, self.max),
             max: cmp::max(self.min, self.max),
+        }
+    }
+
+    fn make_positive(&self) -> Bounds {
+        Bounds {
+            min: cmp::max(self.min, 0),
+            max: cmp::max(self.max, 0),
         }
     }
 
@@ -228,35 +230,28 @@ impl Expression {
 
             let output_bounds = Bounds::from_nod(nod);
 
-            let restricted_sub_bounds_case_1 = Bounds {
+            let restricted_sub_bounds_1 = Bounds {
                 min: rest_bounds.min - cum_answer_bounds.min,
                 max: rest_bounds.min - cum_answer_bounds.max,
             }.flip_non_valid();
 
-            let restricted_sub_bounds_case_2 = Bounds {
+            let restricted_sub_bounds_2 = Bounds {
                 min: rest_bounds.max - cum_answer_bounds.min,
                 max: rest_bounds.max - cum_answer_bounds.max,
             }.flip_non_valid();
 
-            let restricted_add_bounds_case_1 = Bounds {
+            let restricted_add_bounds_1 = Bounds {
                 min: cum_answer_bounds.min - rest_bounds.min,
                 max: cum_answer_bounds.max - rest_bounds.min,
             }.flip_non_valid();
 
-            let restricted_add_bounds_case_2 = Bounds {
+            let restricted_add_bounds_2 = Bounds {
                 min: cum_answer_bounds.min - rest_bounds.max,
                 max: cum_answer_bounds.max - rest_bounds.max,
             }.flip_non_valid();
 
 
-            let restricted_add_bounds_1 = restricted_add_bounds_case_1;
-            let restricted_add_bounds_2 = restricted_add_bounds_case_2;
-
             let restricted_add_bounds = Bounds::union_many(&vec![&restricted_add_bounds_1, &restricted_add_bounds_2]).intersect(&output_bounds);
-
-            let restricted_sub_bounds_1 = restricted_sub_bounds_case_1;
-            let restricted_sub_bounds_2 = restricted_sub_bounds_case_2;
-
             let restricted_sub_bounds = Bounds::union_many(&vec![&restricted_sub_bounds_1, &restricted_sub_bounds_2]).intersect(&output_bounds);
 
             let mut possible_op_bounds = vec![];
@@ -278,7 +273,6 @@ impl Expression {
 
             let num = chosen_bounds.random_value();
 
-
             // Undo the operation to the answer bounds
             cum_answer_bounds = match op {
                 Op::Add => Bounds {
@@ -291,6 +285,10 @@ impl Expression {
                 },
                 _ => panic!("Invalid op")
             };
+
+            // Ensure the answer bounds are positive
+            cum_answer_bounds = cum_answer_bounds.make_positive();
+
 
             filled_eq.numbers.push(num);
 
@@ -327,22 +325,22 @@ impl Equation {
     }
 
     fn print(&self) {
-        let mut eqStr = String::new();
+        let mut eq_str = String::new();
         for i in 0..self.numbers.len() {
             let num = self.numbers[i];
             let op = self.ops.get(i);
-            eqStr.push_str(&num.to_string());
+            eq_str.push_str(&num.to_string());
             match op {
-                Some(Op::Add) => eqStr.push_str("+"),
-                Some(Op::Subtract) => eqStr.push_str("-"),
-                None => eqStr.push_str("?"),
+                Some(Op::Add) => eq_str.push_str("+"),
+                Some(Op::Subtract) => eq_str.push_str("-"),
+                None => eq_str.push_str("?"),
                 _ => (),
             };
         }
-        eqStr.pop();
-        eqStr.push_str("=");
-        eqStr.push_str(&self.calc_value().to_string());
-        println!("{}", eqStr);
+        eq_str.pop();
+        eq_str.push_str("=");
+        eq_str.push_str(&self.calc_value().to_string());
+        println!("{}", eq_str);
     }
 
     fn calc_value(&self) -> i32 {
@@ -360,7 +358,7 @@ impl Equation {
         val
     }
 
-    fn make_random(len: u8) -> Option<Equation> {
+    fn try_make_random(len: u8) -> Option<Equation> {
         let mut rng = rand::thread_rng();
 
         let answer_max_nod: u8 = 3;
@@ -372,7 +370,7 @@ impl Equation {
 
         let answer_bounds = Bounds::from_nod(answer_nod as i32);
 
-        let nod_left = len - (answer_nod as u8);
+        let nod_left = len - (answer_nod+1);
 
         let expression = Expression::from_length(nod_left as i32);
 
@@ -386,6 +384,15 @@ impl Equation {
                 exp.gen_rand(answer_bounds)
             }
             None => None
+        }
+    }
+
+    fn make_random(len: u8) -> Equation {
+        loop {
+            match Equation::try_make_random(len) {
+                Some(eq) => return eq,
+                None => (),
+            }
         }
     }
 }
@@ -530,11 +537,6 @@ mod tests {
 
 pub fn main() {
     let eq = Equation::make_random(8);
-    match eq {
-        Some(eq) => {
-            eq.print();
-        },
-        None => print!("No equation found")
-    }
+    eq.print();
 }
 

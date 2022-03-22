@@ -1,7 +1,10 @@
 [package]
-name = "wordle-solver"
+name = "rustle"
 version = "0.1.0"
 edition = "2021"
+description = "Play wordle and nerdle in your terminal"
+license-file = "LICENSE"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
