@@ -4,7 +4,7 @@ Play wordle and nerdle in the terminal.
 
 ## TODO
 
-- Add Multiply and Divide to the equation gen
+- Add divide to the equation gen
   - The challenge here is the output of mul(a,b) is not continuous like add(a,b) is
   - Might just have to skip the times where it messes up because of this
 - Turn into an executable (rustle) with options `-n` to play nerdle `-l` for length of word/equation

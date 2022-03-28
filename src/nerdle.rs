@@ -6,6 +6,11 @@ use rand::seq::SliceRandom; // 0.7.2
 // Terms
 // nod: num of digits
 
+
+// Notes
+// Generate equation by end to start
+
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 struct Bounds {
     min: i32,
@@ -88,9 +93,49 @@ struct Expression {
 enum Op {
     Add,
     Subtract,
-    Multipy,
+    Multiply,
     Divide
 }
+
+pub trait Operation {
+    fn get_restricted_bounds(answer_bounds: &Bounds, rest_bounds: &Bounds) -> Bounds;
+    fn undo_op();
+}
+
+// pub struct AddOperation { }
+// impl Operation for AddOperation {
+//     fn get_restricted_bounds(answer_bounds: &Bounds, rest_bounds: &Bounds) -> Bounds {
+//             let restricted_add_bounds_1 = Bounds {
+//                 min: answer_bounds.min - rest_bounds.min,
+//                 max: answer_bounds.max - rest_bounds.min,
+//             }.flip_non_valid();
+
+//             let restricted_add_bounds_2 = Bounds {
+//                 min: answer_bounds.min - rest_bounds.max,
+//                 max: answer_bounds.max - rest_bounds.max,
+//             }.flip_non_valid();
+
+//             Bounds::union_many(&vec![&restricted_add_bounds_1, &restricted_add_bounds_2])
+//     }
+// }
+
+// pub struct SubtractOperation { }
+// impl Operation for SubtractOperation {
+//     fn get_restricted_bounds(answer_bounds: &Bounds, rest_bounds: &Bounds) -> Bounds {
+//         let restricted_sub_bounds_1 = Bounds {
+//             min: rest_bounds.min - answer_bounds.min,
+//             max: rest_bounds.min - answer_bounds.max,
+//         }.flip_non_valid();
+
+//         let restricted_sub_bounds_2 = Bounds {
+//             min: rest_bounds.max - answer_bounds.min,
+//             max: rest_bounds.max - answer_bounds.max,
+//         }.flip_non_valid();
+
+//         Bounds::union_many(&vec![&restricted_sub_bounds_1, &restricted_sub_bounds_2])
+//     }
+// }
+
 
 impl Expression {
 
@@ -188,15 +233,27 @@ impl Expression {
             return Bounds::from_nod(self.nods[0]);
         }
 
-        let nod1 = self.nods[0];
-        let nod2 = self.nods[1];
+        fn op_output_bounds(bounds1: Bounds, bounds2: Bounds) -> Bounds {
+            let add_bounds = Bounds {
+                min: bounds1.min + bounds2.min,
+                max: bounds1.max + bounds2.max,
+            };
+            let sub_bounds = Bounds {
+                min: bounds1.min - bounds2.max,
+                max: bounds1.max - bounds2.min,
+            };
+            let mul_bounds = Bounds {
+                min: bounds1.min * bounds2.min,
+                max: bounds1.max * bounds2.max,
+            };
+            Bounds::union_many(&vec![&add_bounds, &sub_bounds, &mul_bounds])
+        }
 
-        let bounds_add = add_value_bounds(nod1, nod2);
-        let bounds_sub = sub_value_bounds(nod1, nod2);
-        // let bounds_mul = mul_value_bounds(nod1, nod2);
-
-
-        Bounds::union_many(&vec![&bounds_add, &bounds_sub])
+        let mut b1 = Bounds::from_nod(self.nods[0]);
+        for i in 1..self.nods.len() {
+            b1 = op_output_bounds(b1, Bounds::from_nod(self.nods[i]));
+        }
+        b1
     }
 
     // Remove the first {amount} of elements from self
@@ -250,9 +307,37 @@ impl Expression {
                 max: cum_answer_bounds.max - rest_bounds.max,
             }.flip_non_valid();
 
+            let restricted_mul_bounds_1 = Bounds {
+                min: if rest_bounds.min != 0 {
+                    cum_answer_bounds.min / rest_bounds.min
+                } else {
+                    // Doesn't matter since we are multiplying by 0
+                    i32::MIN
+                },
+                max: if rest_bounds.max != 0 {
+                    cum_answer_bounds.max / rest_bounds.max
+                } else {
+                    i32::MAX
+                }
+            }.flip_non_valid();
+
+            let restricted_mul_bounds_2 = Bounds {
+                min: if rest_bounds.max != 0 {
+                    cum_answer_bounds.min / rest_bounds.max
+                } else {
+                    // Doesn't matter since we are multiplying by 0
+                    i32::MIN
+                },
+                max: if rest_bounds.min != 0 {
+                    cum_answer_bounds.max / rest_bounds.min
+                } else {
+                    i32::MAX
+                }
+            }.flip_non_valid();
 
             let restricted_add_bounds = Bounds::union_many(&vec![&restricted_add_bounds_1, &restricted_add_bounds_2]).intersect(&output_bounds);
             let restricted_sub_bounds = Bounds::union_many(&vec![&restricted_sub_bounds_1, &restricted_sub_bounds_2]).intersect(&output_bounds);
+            let restricted_mul_bounds = Bounds::union_many(&vec![&restricted_mul_bounds_1, &restricted_mul_bounds_2]).intersect(&output_bounds);
 
             let mut possible_op_bounds = vec![];
 
@@ -262,6 +347,10 @@ impl Expression {
 
             if restricted_sub_bounds.is_valid() {
                 possible_op_bounds.push((restricted_sub_bounds, Op::Subtract));
+            }
+
+            if restricted_mul_bounds.is_valid() {
+                possible_op_bounds.push((restricted_mul_bounds, Op::Multiply));
             }
 
             if possible_op_bounds.len() == 0 {
@@ -282,6 +371,10 @@ impl Expression {
                 Op::Subtract => Bounds {
                     min: cum_answer_bounds.min + num,
                     max: cum_answer_bounds.max + num,
+                },
+                Op::Multiply => Bounds {
+                    min: cum_answer_bounds.min / num,
+                    max: cum_answer_bounds.max / num,
                 },
                 _ => panic!("Invalid op")
             };
@@ -319,11 +412,6 @@ struct Equation {
 }
 
 impl Equation {
-    // TODO
-    fn do_op(&self, nod: i32, answer_bounds: Bounds) {
-
-    }
-
     fn print(&self) {
         let mut eq_str = String::new();
         for i in 0..self.numbers.len() {
@@ -333,6 +421,7 @@ impl Equation {
             match op {
                 Some(Op::Add) => eq_str.push_str("+"),
                 Some(Op::Subtract) => eq_str.push_str("-"),
+                Some(Op::Multiply) => eq_str.push_str("*"),
                 None => eq_str.push_str("?"),
                 _ => (),
             };
@@ -351,6 +440,7 @@ impl Equation {
             match op {
                 Some(Op::Add) => val += num,
                 Some(Op::Subtract) => val -= num,
+                Some(Op::Multiply) => val *= num,
                 None => (),
                 _ => (),
             };
@@ -397,33 +487,6 @@ impl Equation {
     }
 }
 
-fn add_value_bounds(nod1: i32, nod2: i32) -> Bounds {
-    let nod1_bounds = Bounds::from_nod(nod1);
-    let nod2_bounds = Bounds::from_nod(nod2);
-    Bounds {
-       min: nod1_bounds.min + nod2_bounds.min,
-       max: nod1_bounds.max + nod2_bounds.max,
-    }
-}
-
-fn mul_value_bounds(nod1: i32, nod2: i32) -> Bounds {
-    let nod1_bounds = Bounds::from_nod(nod1);
-    let nod2_bounds = Bounds::from_nod(nod2);
-    Bounds {
-       min: nod1_bounds.min * nod2_bounds.min,
-       max: nod1_bounds.max * nod2_bounds.max,
-    }
-}
-
-fn sub_value_bounds(nod1: i32, nod2: i32) -> Bounds {
-    let nod1_bounds = Bounds::from_nod(nod1);
-    let nod2_bounds = Bounds::from_nod(nod2);
-    Bounds {
-       min: nod1_bounds.min - nod2_bounds.max,
-       max: nod1_bounds.max - nod2_bounds.min,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -441,28 +504,6 @@ mod tests {
             max: 99
         });
     }
-
-    #[test]
-    fn equality_bound() {
-        // let eq1 = Expression {
-        //     nods: vec![1,1],
-        // };
-        // let b1 = eq1.max_bounds();
-        // assert_eq!(b1, Bounds {
-        //     min: -9,
-        //     max: 81
-        // });
-
-        // let eq2 = Expression {
-        //     nods: vec![3, 2],
-        // };
-        // let b2 = eq2.max_bounds();
-        // assert_eq!(b2, Bounds {
-        //     min: 100 - 99,
-        //     max: 999 * 99,
-        // });
-    }
-
 
     #[test]
     fn bounds_intersect() {
@@ -487,50 +528,6 @@ mod tests {
 
         assert_eq!(b4.min, 3);
         assert_eq!(b4.max, 6);
-    }
-
-    #[test]
-    fn test_add_value_bounds() {
-        let b1 = add_value_bounds(1, 1);
-        assert_eq!(b1, Bounds {
-            min: 0,
-            max: 18
-        });
-        let b2 = add_value_bounds(1, 2);
-        assert_eq!(b2, Bounds {
-            min: 10,
-            max: 99 + 9
-        });
-    }
-
-    #[test]
-    fn test_mul_value_bounds() {
-        let b1 = mul_value_bounds(1, 1);
-        assert_eq!(b1, Bounds {
-            min: 0,
-            max: 81
-        });
-
-        let b2 = mul_value_bounds(1, 2);
-        assert_eq!(b2, Bounds {
-            min: 0,
-            max: 99 * 9,
-        })
-    }
-
-    #[test]
-    fn test_sub_value_bounds() {
-        let b1 = sub_value_bounds(1, 1);
-        assert_eq!(b1, Bounds {
-            min: -9,
-            max: 9
-        });
-
-        let b2 = sub_value_bounds(2, 1);
-        assert_eq!(b2, Bounds {
-            min: 1,
-            max: 99
-        });
     }
 }
 
