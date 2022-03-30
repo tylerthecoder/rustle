@@ -373,8 +373,8 @@ impl Expression {
                     max: cum_answer_bounds.max + num,
                 },
                 Op::Multiply => Bounds {
-                    min: cum_answer_bounds.min / num,
-                    max: cum_answer_bounds.max / num,
+                    min: if num != 0 {cum_answer_bounds.min / num} else {0},
+                    max: if num !=0 {cum_answer_bounds.max / num} else {0},
                 },
                 _ => panic!("Invalid op")
             };
