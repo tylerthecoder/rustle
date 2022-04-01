@@ -204,16 +204,14 @@ impl Expression {
         new
     }
 
-    fn print(&self) {
+    fn get_str(&self) -> String {
         let mut output = String::new();
         for nod in self.nods.to_owned() {
-            for _ in 0..nod {
-                output.push_str("x");
-            }
+            output.push_str(&"x".repeat(nod as usize));
             output.push_str("*");
         }
         output.pop();
-        println!("{}", output);
+        output
     }
 
     fn char_length(&self) -> i32 {
@@ -412,7 +410,7 @@ struct Equation {
 }
 
 impl Equation {
-    fn print(&self) {
+    fn get_str(&self) -> String {
         let mut eq_str = String::new();
         for i in 0..self.numbers.len() {
             let num = self.numbers[i];
@@ -429,7 +427,7 @@ impl Equation {
         eq_str.pop();
         eq_str.push_str("=");
         eq_str.push_str(&self.calc_value().to_string());
-        println!("{}", eq_str);
+        eq_str
     }
 
     fn calc_value(&self) -> i32 {
@@ -456,8 +454,6 @@ impl Equation {
         let answer_nod = rng.gen_range(1..answer_max_nod+1);
         // let answer_nod = 1;
 
-        println!("{}", answer_nod);
-
         let answer_bounds = Bounds::from_nod(answer_nod as i32);
 
         let nod_left = len - (answer_nod+1);
@@ -470,7 +466,7 @@ impl Equation {
 
         match expression {
             Some(exp) => {
-                exp.print();
+                println!("{}={}", exp.get_str(), "x".to_string().repeat(answer_nod as usize));
                 exp.gen_rand(answer_bounds)
             }
             None => None
@@ -531,9 +527,7 @@ mod tests {
     }
 }
 
-
-pub fn main() {
-    let eq = Equation::make_random(8);
-    eq.print();
+pub fn play(n: u8) -> String {
+    let eq = Equation::make_random(n);
+    eq.get_str()
 }
-

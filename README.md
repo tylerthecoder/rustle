@@ -10,3 +10,4 @@ Play wordle and nerdle in the terminal.
 - Turn into an executable (rustle) with options `-n` to play nerdle `-l` for length of word/equation
 - Cache some of the functions. Output bounds of a equation structure is always the same.
   This may only need to be done if the program is noticeably slow.
+- Deploy by having a place to curl from my website (`curl files.tylertracy.com/rustle | bash`)
