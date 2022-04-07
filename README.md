@@ -6,15 +6,20 @@ Play wordle and nerdle in the terminal.
 
 You can install the package directly from cargo
 ` cargo install rustle-game`
+Or if you don't have cargo, you can curl it from my website
+`curl https://files.tylertracy.com/rustle-game > rustle`
 
-## TODO
+## Usage
 
-These will move to (Github Issues)[https://github.com/tylerthecoder/rustle/issues]
+Play rustle
+`rustle`
 
-- Add divide to the equation gen
-  - The challenge here is the output of mul(a,b) is not continuous like add(a,b) is
-  - Might just have to skip the times where it messes up because of this
-- Turn into an executable (rustle) with options `-n` to play nerdle `-l` for length of word/equation
-- Cache some of the functions. Output bounds of a equation structure is always the same.
-  This may only need to be done if the program is noticeably slow.
-- Deploy by having a place to curl from my website (`curl files.tylertracy.com/rustle | bash`)
+Play nerdle
+`rustle -n`
+
+Change the length
+`rustle -l 10` or `rustle-game -n -l 10`
+
+## Up next / Issues
+
+(Github Issues)[https://github.com/tylerthecoder/rustle/issues]
