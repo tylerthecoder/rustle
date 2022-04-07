@@ -7,7 +7,7 @@ Play wordle and nerdle in the terminal.
 You can install the package directly from cargo
 ` cargo install rustle-game`
 Or if you don't have cargo, you can curl it from my website
-`curl https://files.tylertracy.com/rustle-game > rustle`
+`curl https://files.tylertracy.com/rustle-game > rustle && chmod +x rustle`
 
 ## Usage
 
