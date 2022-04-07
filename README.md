@@ -2,7 +2,14 @@
 
 Play wordle and nerdle in the terminal.
 
+## Install
+
+You can install the package directly from cargo
+` cargo install rustle-game`
+
 ## TODO
+
+These will move to (Github Issues)[https://github.com/tylerthecoder/rustle/issues]
 
 - Add divide to the equation gen
   - The challenge here is the output of mul(a,b) is not continuous like add(a,b) is

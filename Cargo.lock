@@ -219,7 +219,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustle"
+name = "rustle-game"
 version = "0.1.0"
 dependencies = [
  "clap",
